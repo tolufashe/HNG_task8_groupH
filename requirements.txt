@@ -1,0 +1,7 @@
+
+requests
+psycopg2-binary
+sqlalchemy
+python-dotenv
+apache-airflow==2.9.2
+

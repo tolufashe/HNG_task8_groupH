@@ -1,0 +1,102 @@
+
+services:
+
+  # Lake Database (Raw ERP Data)
+  lake_postgres:
+    image: postgres:15
+    container_name: lake_postgres
+    environment:
+      POSTGRES_DB: lake
+      POSTGRES_USER: lake_user
+      POSTGRES_PASSWORD: lake_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - lake_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lake_user -d lake"]
+      interval: 10s
+      retries: 5
+
+  # Airflow Metadata Database
+  airflow_postgres:
+    image: postgres:15
+    container_name: airflow_postgres
+    environment:
+      POSTGRES_DB: airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+    ports:
+      - "5434:5432"
+    volumes:
+      - airflow_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      retries: 5
+
+  # Airflow Webserver
+  airflow_webserver:
+    build: .
+    container_name: airflow_webserver
+    restart: always
+
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+      lake_postgres:
+        condition: service_healthy
+
+    env_file:
+      - .env
+
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >
+        postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow
+
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+    volumes:
+      - ./extractor/dags:/opt/airflow/dags
+      - ./extractor:/opt/airflow/extractor
+
+    ports:
+      - "8080:8080"
+
+    command: webserver
+
+  # Airflow Scheduler
+  airflow_scheduler:
+    build: .
+    container_name: airflow_scheduler
+    restart: always
+
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+      lake_postgres:
+        condition: service_healthy
+
+    env_file:
+      - .env
+
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >
+        postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow
+
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+    volumes:
+      - ./extractor/dags:/opt/airflow/dags
+      - ./extractor:/opt/airflow/extractor
+
+    command: scheduler
+
+volumes:
+  lake_data:
+  airflow_pg_data:
+
