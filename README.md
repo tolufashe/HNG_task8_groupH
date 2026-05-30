@@ -1,40 +1,39 @@
-# ERP Extraction 
+# RetailCo Data Pipeline
 
-This section covers everything you need to set up and run the ERP data extractor.
-The extractor pulls data from the RetailCo ERP API and stores it in a raw lake
-PostgreSQL database, ready to load into the warehouse.
+This repository contains the full RetailCo data platform built with Apache Airflow, dlt, and dbt.
+The pipeline extracts data from the RetailCo ERP API, loads it into a data warehouse, and transforms
+it into analytics-ready dimensional models.
 
 ---
 
 ## What this does
 
-The extractor connects to the RetailCo ERP REST API, downloads all 9 business
-entities, and writes them into a PostgreSQL database called the **raw lake**.
-It runs automatically every day via Apache Airflow.
+The pipeline runs in four stages:
 
-On the first run it downloads everything. On every run after that it only
-downloads records that are new or updated since the last run, so it stays
-fast and efficient.
+1. **Extract** — pulls all 9 business entities from the ERP API into a raw lake PostgreSQL database
+2. **Load** — moves data from the lake into the warehouse using dlt, with type coercion and snake_case renaming
+3. **Transform** — dbt staging models clean the data; dbt mart models build Kimball-style dimensions and facts
+4. **Orchestrate** — Airflow runs the full pipeline daily with retries and failure handling
 
 ---
 
 ## Prerequisites
 
-Before running anything, make sure you have the following installed on your machine:
+Before running anything, make sure you have the following installed:
 
-- **Docker Desktop**: download from https://www.docker.com/products/docker-desktop
-- **VS Code**: download from https://code.visualstudio.com
-- **Python 3.11+**: download from https://www.python.org/downloads
+- **Docker Desktop**: https://www.docker.com/products/docker-desktop
+- **VS Code**: https://code.visualstudio.com
+- **Python 3.11+**: https://www.python.org/downloads
 
-Verify Docker is running by opening Docker Desktop and confirming the whale
-icon appears in your taskbar with the status "Engine running".
+Verify Docker is running by opening Docker Desktop and confirming the whale icon appears
+in your taskbar with the status "Engine running".
 
 ---
 
 ## Step 1: Clone the repository
 
 ```bash
-git clone <your-team-repo-url>
+git clone https://github.com/tolufashe/HNG_task8_groupH.git
 cd retailco-pipeline
 ```
 
@@ -48,6 +47,7 @@ This file holds all secrets and connection details. **Never commit this file to 
 ```
 # ERP API credentials
 ERP_API_KEY=your_api_key_here
+ERP_API_BASE_URL=https://hngstage8da-55c7f5f769c8.herokuapp.com
 
 # Lake database (raw data storage)
 LAKE_DB_HOST=lake_postgres
@@ -55,12 +55,19 @@ LAKE_DB_PORT=5432
 LAKE_DB_NAME=lake
 LAKE_DB_USER=lake_user
 LAKE_DB_PASSWORD=lake_pass
+
+# Warehouse database (clean data storage)
+WAREHOUSE_DB_HOST=warehouse_postgres
+WAREHOUSE_DB_PORT=5432
+WAREHOUSE_DB_NAME=warehouse
+WAREHOUSE_DB_USER=warehouse_user
+WAREHOUSE_DB_PASSWORD=warehouse_pass
 ```
 
 Replace `your_api_key_here` with your actual API key.
 
-> **Important:** The `.gitignore` file already excludes `.env` from Git.
-> Never paste your API key anywhere that gets committed to the repository.
+The `.gitignore` file already excludes `.env` from Git. Never paste your API key
+anywhere that gets committed to the repository.
 
 ---
 
@@ -72,178 +79,94 @@ Open a terminal in the `retailco-pipeline` folder and run:
 docker compose up -d
 ```
 
-This command starts four containers:
+This starts the full infrastructure:
 
 | Container | Purpose |
 |---|---|
-| `lake_postgres` | The raw lake database where extracted data is stored |
-| `airflow_postgres` | Airflow's internal database (not your data) |
+| `lake_postgres` | Raw lake database where API data is initially stored (port 5433) |
+| `warehouse_postgres` | Clean warehouse where dlt loads normalized data (port 5435) |
+| `airflow_postgres` | Airflow internal database — not your data (port 5434) |
 | `airflow_init` | One-time setup container, runs once then exits |
 | `airflow_createuser` | Creates the Airflow admin user, runs once then exits |
 | `airflow_scheduler` | Runs DAGs on schedule |
-| `airflow_webserver` | The Airflow UI accessible at http://localhost:8080 |
+| `airflow_webserver` | Airflow UI at http://localhost:8080 |
 
-The first time you run this it will download the Docker images which takes
-3 to 5 minutes. Subsequent starts are much faster.
+The first time you run this it will download Docker images which takes 3 to 5 minutes.
+Subsequent starts are much faster.
 
-To confirm everything started correctly:
+Confirm everything started:
 
 ```bash
 docker compose ps
 ```
 
-You should see `lake_postgres` and both Airflow containers showing as
-**healthy** or **running**. The `airflow_init` and `airflow_createuser`
-containers will show as **exited**, this is correct, they are one-time
-setup containers.
+You should see `lake_postgres`, `warehouse_postgres`, and both Airflow containers
+showing as **healthy** or **running**.
 
 ---
 
 ## Step 4: Open Airflow
 
-Open your browser and go to:
+Go to `http://localhost:8080` and log in with:
 
-```
-http://localhost:8080
-```
-
-Log in with:
 - **Username:** `admin`
 - **Password:** `admin`
-
-You will see the Airflow DAGs page.
 
 ---
 
 ## Step 5: Run the extract DAG
 
 1. Find the DAG called **`erp_extract`** in the list
-2. Click the **toggle** on the left to enable it (it turns blue)
-3. Click the **play button** on the right to trigger a manual run
-4. Click on the DAG name to open it
-5. Click the **Graph** tab to watch tasks run in real time
+2. Click the toggle to enable it (turns blue)
+3. Click the play button to trigger a manual run
+4. Click the DAG name and select the **Graph** tab to watch tasks run in real time
 
-The DAG has 9 tasks, one for each entity. They will turn deep green one by one
-as each entity finishes extracting. Most tasks complete in a few minutes.
-`order_items` and `inventory_movements` are large datasets and will take
-longer on the first run (up to 2 hours each on a full extract).
+The DAG has 9 tasks, one per entity. `order_items` and `inventory_movements` are large
+and take longer on the first run (up to 2 hours each).
 
 ---
 
-## Step 6: Verify data landed
+## Step 6: Run the dlt load pipeline
 
-Once all tasks are deep green, connect to the lake database and confirm the
-tables were created:
+Once extraction is complete:
+
+1. Find the DAG called **`load_warehouse`** in the Airflow list
+2. Enable and trigger it
+3. This runs the dlt pipeline which moves data from the lake to the warehouse,
+   converts camelCase column names to snake_case, and applies correct data types
+
+To run the dlt pipeline manually outside Airflow:
 
 ```bash
-docker exec -it lake_postgres psql -U lake_user -d lake -c \
-"SELECT relname as table_name, n_live_tup as row_count \
-FROM pg_stat_user_tables WHERE schemaname = 'raw' \
-ORDER BY n_live_tup DESC;"
+cd retailco-pipeline
+python dlt_pipeline/load_warehouse.py
 ```
 
-You should see 10 tables with row counts similar to these:
-
-| Table | Expected rows |
-|---|---|
-| raw.order_items | ~360,000 |
-| raw.inventory_movements | ~355,000 |
-| raw.orders | ~80,000 |
-| raw.payments | ~72,000 |
-| raw.customers | ~5,000 |
-| raw.products | ~2,000 |
-| raw.employees | ~50 |
-| raw.payment_methods | ~5 |
-| raw.stores | ~4 |
-| raw._watermarks | 9 (one per entity) |
+The pipeline uses incremental loading — on the first run it moves all rows,
+on subsequent runs it only moves rows with a newer `updatedAt` timestamp.
 
 ---
 
-## How incremental loading works
-
-After the first full extract, every subsequent daily run only downloads
-records that changed since the last run. This is tracked using a
-**watermarks table**, `raw._watermarks`, which stores the timestamp
-of the most recently updated record per entity.
-
-To check current watermarks:
+## Step 7: Run dbt transformations
 
 ```bash
-docker exec -it lake_postgres psql -U lake_user -d lake -c \
-"SELECT * FROM raw._watermarks ORDER BY entity;"
+cd retailco_dbt
+dbt debug                        # test connection
+dbt snapshot                     # run SCD2 snapshots for dim_customer and dim_product
+dbt run --select staging         # build all 9 staging models + flagged_payments
+dbt run --select marts           # build dimensions and fact tables
+dbt test                         # run all tests
+dbt docs generate                # generate documentation site
+dbt docs serve                   # open docs in browser
 ```
 
-On the next run, the extractor passes each watermark as
-`?updated_after=<timestamp>` to the API, so only new or updated
-records are returned.
-
 ---
 
-## Table reference
+## Connecting to the databases directly
 
-All tables live in the `raw` schema of the `lake` database.
-Every table has an `_extracted_at` column added by the extractor
-showing when each row was last pulled from the API.
-All columns are stored as `TEXT` or `JSONB` — type casting happens
-in the dbt staging layer (Person D's responsibility).
+You can connect from any SQL client using these credentials:
 
-Column names are in **camelCase** as returned by the API
-(e.g. `updatedAt`, `isDeleted`, `firstName`). Person C's dlt pipeline
-converts these to `snake_case` when loading into the warehouse.
-
-### `raw.customers`
-One row per customer. Key columns:
-`id`, `firstName`, `lastName`, `email`, `phone`, `segment`, `tier`,
-`address`, `city`, `state`, `effectiveFrom`, `registeredAt`, `isDeleted`,
-`createdAt`, `updatedAt`
-
-### `raw.products`
-One row per product. Key columns:
-`id`, `name`, `category`, `price`, `cost`, `isDeleted`, `updatedAt`
-
-### `raw.stores`
-One row per RetailCo store (Lagos, Abuja, Port Harcourt, Kano). Key columns:
-`id`, `name`, `city`, `state`, `updatedAt`
-
-### `raw.employees`
-One row per employee. Key columns:
-`id`, `firstName`, `lastName`, `role`, `storeId`, `updatedAt`
-
-### `raw.orders`
-One row per customer order. Key columns:
-`id`, `customerId`, `storeId`, `status`, `createdAt`, `updatedAt`
-Status progresses through: `pending → paid → shipped → delivered`
-
-### `raw.order_items`
-One row per line item within an order (~360,000 rows). Key columns:
-`id`, `orderId`, `productId`, `quantity`, `unitPrice`, `discount`, `updatedAt`
-
-### `raw.payments`
-One row per payment event. Key columns:
-`id`, `orderId`, `customerId`, `amountPaid`, `paymentMethodId`,
-`paymentDate`, `updatedAt`
-Note: negative `amountPaid` values are valid refund records.
-Zero or unexplained negative amounts are flagged in Person D's
-`flagged_payments` table.
-
-### `raw.inventory_movements`
-One row per stock movement event (~355,000 rows). Key columns:
-`id`, `productId`, `storeId`, `movementType`, `quantity`,
-`movementDate`, `updatedAt`
-
-### `raw.payment_methods`
-One row per payment method (card, transfer, cash, etc.). Key columns:
-`id`, `name`, `updatedAt`
-
-### `raw._watermarks`
-Internal tracking table — not source data. One row per entity.
-Stores the `last_updated_at` timestamp used for incremental loading.
-
----
-
-## Connecting to the lake database directly
-
-You can connect to the lake database from any SQL client using:
+### Lake database (raw data)
 
 | Setting | Value |
 |---|---|
@@ -254,29 +177,100 @@ You can connect to the lake database from any SQL client using:
 | Password | lake_pass |
 | Schema | raw |
 
+### Warehouse database (clean data)
+
+| Setting | Value |
+|---|---|
+| Host | localhost |
+| Port | 5435 |
+| Database | warehouse |
+| Username | warehouse_user |
+| Password | warehouse_pass |
+| Schema | raw (after dlt load), then marts (after dbt run) |
+
+---
+
+## Table reference
+
+### Lake tables (`raw` schema, camelCase columns)
+
+| Table | Description | Approx rows |
+|---|---|---|
+| `raw.customers` | One row per customer | ~5,000 |
+| `raw.products` | One row per product | ~2,000 |
+| `raw.stores` | Lagos, Abuja, Port Harcourt, Kano | ~4 |
+| `raw.employees` | One row per employee | ~50 |
+| `raw.orders` | One row per order | ~80,000 |
+| `raw.order_items` | One row per order line item | ~360,000 |
+| `raw.payments` | One row per payment event | ~72,000 |
+| `raw.inventory_movements` | One row per stock movement | ~355,000 |
+| `raw.payment_methods` | Cash, Card, Bank Transfer etc. | ~5 |
+| `raw._watermarks` | Internal incremental tracking, 1 row per entity | 9 |
+
+All lake columns are stored as `TEXT` or `JSONB` in camelCase as returned by the API
+(e.g. `updatedAt`, `isDeleted`, `firstName`).
+
+### Warehouse tables (after dlt load, snake_case columns)
+
+The dlt pipeline converts all camelCase column names to snake_case and applies correct
+data types automatically. For example `updatedAt TEXT` becomes `updated_at TIMESTAMPTZ`.
+
+---
+
+## How incremental loading works
+
+### Extract layer (lake)
+
+After the first full extract, every subsequent daily run only downloads records that changed
+since the last run. This is tracked using `raw._watermarks` which stores the last
+`updated_at` timestamp per entity. The extractor passes this as `?updated_after=<timestamp>`
+to the API.
+
+### Load layer (warehouse)
+
+The dlt pipeline reads the `updatedAt` column from each lake table and only moves rows
+with a newer timestamp than the last run. It uses `write_disposition="merge"` with `id`
+as the primary key, so running the pipeline twice never creates duplicate rows.
+
+---
+
+## Flagged payments
+
+Some payment rows are anomalous and excluded from revenue analysis:
+
+- `amount_paid = 0` — always flagged as `zero_amount`
+- `amount_paid < 0` and `payment_type != 'refund'` — flagged as `unexplained_negative`
+
+Legitimate refunds (`amount_paid < 0` and `payment_type = 'refund'`) are valid records
+and remain in the main payments flow.
+
+Flagged rows are isolated into the `flagged_payments` table built by dbt. Run
+`dbt run --select flagged_payments` to build it, then query it directly to see
+what was isolated and why.
 
 ---
 
 ## Troubleshooting
 
-**http://localhost:8080 won't open**
-Airflow is still starting up. Wait 2–3 minutes after running
-`docker compose up -d` and try again.
+**http://localhost:8080 will not open**
+Airflow is still starting. Wait 2 to 3 minutes after `docker compose up -d` and try again.
 
 **A task is red in Airflow**
-Click on the red task → click Logs → read the error message.
-Common causes: API timeout (the ERP occasionally has slow responses),
-rate limiting (the extractor handles this automatically with retries).
-Click "Clear task" to retry.
+Click the red task, click Logs, read the error. Common causes are API timeouts or rate
+limiting — the extractor handles these with automatic retries. Click "Clear task" to retry.
 
 **Tables are missing after a green run**
-The entity returned zero rows from the API on that run. This is normal
-for incremental runs when no data has changed. Trigger a full re-extract
-by deleting the relevant row from `raw._watermarks` and re-running.
+The entity returned zero rows — normal for incremental runs when nothing changed.
+To force a full re-extract, delete the relevant row from `raw._watermarks` and re-run.
 
-**Docker containers won't start**
-Make sure Docker Desktop is open and the engine is running (whale icon
-in taskbar). Then run `docker compose down -v` and `docker compose up -d`
-to start fresh.
+**Docker containers will not start**
+Make sure Docker Desktop is open and the engine is running. Then run:
 
----
+```bash
+docker compose down -v
+docker compose up -d
+```
+
+**dbt cannot connect to the warehouse**
+Run `dbt debug` and check the error. Confirm `warehouse_postgres` is running with
+`docker compose ps` and verify your `profiles.yml` matches the warehouse credentials.
