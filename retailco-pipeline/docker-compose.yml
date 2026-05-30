@@ -17,7 +17,7 @@ services:
       interval: 10s
       retries: 5
 
-  # Data Warehouse Database (Person C)
+  # Data Warehouse Database
   warehouse_postgres:
     image: postgres:15
     container_name: warehouse_postgres
@@ -77,7 +77,7 @@ services:
     volumes:
       - ./extractor/dags:/opt/airflow/dags
       - ./extractor:/opt/airflow/extractor
-      - ./dlt_pipeline:/opt/airflow/dlt_pipeline # Added so Airflow can see your script!
+      - ./dlt_pipeline:/opt/airflow/dlt_pipeline 
 
     ports:
       - "8080:8080"
@@ -110,7 +110,7 @@ services:
     volumes:
       - ./extractor/dags:/opt/airflow/dags
       - ./extractor:/opt/airflow/extractor
-      - ./dlt_pipeline:/opt/airflow/dlt_pipeline # Added so Airflow can see your script!
+      - ./dlt_pipeline:/opt/airflow/dlt_pipeline
 
     command: scheduler
 
