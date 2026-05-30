@@ -1,0 +1,175 @@
+version: 2
+
+models:
+
+  - name: dim_date
+    columns:
+      - name: date_key
+        tests:
+          - not_null
+          - unique
+
+  - name: dim_store
+    columns:
+      - name: store_sk
+        tests:
+          - not_null
+          - unique
+      - name: store_id
+        tests:
+          - not_null
+
+  - name: dim_employee
+    columns:
+      - name: employee_sk
+        tests:
+          - not_null
+          - unique
+      - name: employee_id
+        tests:
+          - not_null
+
+  - name: dim_payment_method
+    columns:
+      - name: payment_method_sk
+        tests:
+          - not_null
+          - unique
+
+  - name: dim_customer
+    columns:
+      - name: customer_sk
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        tests:
+          - not_null
+
+  - name: dim_product
+    columns:
+      - name: product_sk
+        tests:
+          - not_null
+          - unique
+      - name: product_id
+        tests:
+          - not_null
+
+  - name: fct_sales
+    columns:
+      - name: sales_sk
+        tests:
+          - not_null
+          - unique
+      - name: customer_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_sk
+      - name: product_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_product')
+              field: product_sk
+      - name: store_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_store')
+              field: store_sk
+      - name: employee_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_employee')
+              field: employee_sk
+      - name: date_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+
+  - name: fct_payments
+    columns:
+      - name: payment_sk
+        tests:
+          - not_null
+          - unique
+      - name: customer_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_sk
+      - name: store_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_store')
+              field: store_sk
+      - name: payment_method_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_payment_method')
+              field: payment_method_sk
+      - name: date_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+
+  - name: fct_inventory_daily
+    columns:
+      - name: inventory_sk
+        tests:
+          - not_null
+          - unique
+      - name: product_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_product')
+              field: product_sk
+      - name: store_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_store')
+              field: store_sk
+      - name: date_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+
+  - name: fct_order_lifecycle
+    columns:
+      - name: lifecycle_sk
+        tests:
+          - not_null
+          - unique
+      - name: customer_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_sk
+      - name: store_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_store')
+              field: store_sk
+      - name: ordered_date_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
