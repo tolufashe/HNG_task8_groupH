@@ -24,7 +24,7 @@ API_BASE = "https://hngstage8da-55c7f5f769c8.herokuapp.com"
 API_KEY = os.getenv("ERP_API_KEY")
 
 MAX_RETRIES = 5
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = (10, 120)
 PAGE_LIMIT = 100
 
 DB_CONFIG = {
@@ -192,9 +192,9 @@ def get_watermark(conn, entity):
 def save_watermark(conn, entity, rows):
 
     timestamps = [
-        r.get("updated_at")
+        r.get("updatedAt")
         for r in rows
-        if r.get("updated_at")
+        if r.get("updatedAt")
     ]
 
     if not timestamps:
