@@ -1,4 +1,3 @@
-
 services:
 
   # Lake Database (Raw ERP Data)
@@ -15,6 +14,23 @@ services:
       - lake_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lake_user -d lake"]
+      interval: 10s
+      retries: 5
+
+  # Data Warehouse Database (Person C)
+  warehouse_postgres:
+    image: postgres:15
+    container_name: warehouse_postgres
+    environment:
+      POSTGRES_DB: warehouse
+      POSTGRES_USER: warehouse_user
+      POSTGRES_PASSWORD: warehouse_pass
+    ports:
+      - "5435:5432"
+    volumes:
+      - warehouse_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U warehouse_user -d warehouse"]
       interval: 10s
       retries: 5
 
@@ -46,21 +62,22 @@ services:
         condition: service_healthy
       lake_postgres:
         condition: service_healthy
+      warehouse_postgres:
+        condition: service_healthy
 
     env_file:
       - .env
 
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >
         postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow
-
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
 
     volumes:
       - ./extractor/dags:/opt/airflow/dags
       - ./extractor:/opt/airflow/extractor
+      - ./dlt_pipeline:/opt/airflow/dlt_pipeline # Added so Airflow can see your script!
 
     ports:
       - "8080:8080"
@@ -78,25 +95,26 @@ services:
         condition: service_healthy
       lake_postgres:
         condition: service_healthy
+      warehouse_postgres:
+        condition: service_healthy
 
     env_file:
       - .env
 
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >
         postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow
-
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
 
     volumes:
       - ./extractor/dags:/opt/airflow/dags
       - ./extractor:/opt/airflow/extractor
+      - ./dlt_pipeline:/opt/airflow/dlt_pipeline # Added so Airflow can see your script!
 
     command: scheduler
 
 volumes:
   lake_data:
   airflow_pg_data:
-
+  warehouse_data:
