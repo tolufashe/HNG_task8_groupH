@@ -1,0 +1,95 @@
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.9.2-python3.11
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__WEBSERVER__SECRET_KEY: "retailco_secret_key_2024"
+    ERP_API_KEY: ${ERP_API_KEY}
+    LAKE_DB_HOST: lake_postgres
+    LAKE_DB_PORT: 5432
+    LAKE_DB_NAME: lake
+    LAKE_DB_USER: lake_user
+    LAKE_DB_PASSWORD: lake_pass
+    _PIP_ADDITIONAL_REQUIREMENTS: "requests psycopg2-binary python-dotenv"
+  volumes:
+    - ./extractor/dags:/opt/airflow/dags
+    - ./extractor:/opt/airflow/extractor
+    - airflow_logs:/opt/airflow/logs
+  depends_on:
+    airflow_postgres:
+      condition: service_healthy
+    lake_postgres:
+      condition: service_healthy
+
+services:
+
+  airflow_postgres:
+    image: postgres:15
+    container_name: airflow_postgres
+    environment:
+      POSTGRES_DB: airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+    volumes:
+      - airflow_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      retries: 5
+
+  lake_postgres:
+    image: postgres:15
+    container_name: lake_postgres
+    environment:
+      POSTGRES_DB: lake
+      POSTGRES_USER: lake_user
+      POSTGRES_PASSWORD: lake_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - lake_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lake_user -d lake"]
+      interval: 10s
+      retries: 5
+
+  airflow_init:
+    <<: *airflow-common
+    container_name: airflow_init
+    command: ["db", "init"]
+    restart: "no"
+
+  airflow_createuser:
+    <<: *airflow-common
+    container_name: airflow_createuser
+    command: ["users", "create", "--username", "admin", "--password", "admin", "--firstname", "Admin", "--lastname", "User", "--role", "Admin", "--email", "admin@retailco.com"]
+    depends_on:
+      airflow_init:
+        condition: service_completed_successfully
+    restart: "no"
+
+  airflow_scheduler:
+    <<: *airflow-common
+    container_name: airflow_scheduler
+    command: ["scheduler"]
+    depends_on:
+      airflow_createuser:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow_webserver:
+    <<: *airflow-common
+    container_name: airflow_webserver
+    command: ["webserver"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow_createuser:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  airflow_pg_data:
+  lake_data:
+  airflow_logs:
