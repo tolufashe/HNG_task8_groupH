@@ -1,5 +1,7 @@
 x-airflow-common: &airflow-common
   image: apache/airflow:2.9.2-python3.11
+  env_file: 
+    - .env
   environment:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres/airflow
@@ -11,11 +13,11 @@ x-airflow-common: &airflow-common
     LAKE_DB_NAME: lake
     LAKE_DB_USER: lake_user
     LAKE_DB_PASSWORD: lake_pass
-    WAREHOUSE_HOST: warehouse_postgres
-    WAREHOUSE_PORT: 5432
-    WAREHOUSE_DB: warehouse
-    WAREHOUSE_USER: warehouse_user
-    WAREHOUSE_PASSWORD: warehouse_pass
+    WAREHOUSE_DB_HOST: warehouse_postgres
+    WAREHOUSE_DB_PORT: 5432
+    WAREHOUSE_DB_NAME: warehouse
+    WAREHOUSE_DB_USER: warehouse_user
+    WAREHOUSE_DB_PASSWORD: warehouse_pass
     _PIP_ADDITIONAL_REQUIREMENTS: "requests psycopg2-binary python-dotenv dlt[postgres]"
   volumes:
     - ./extractor/dags:/opt/airflow/dags
