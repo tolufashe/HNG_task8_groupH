@@ -18,7 +18,7 @@ with DAG(
     default_args=default_args,
     start_date=datetime(2024, 1, 1),
     schedule_interval="@daily",
-    catchup=True,
+    catchup=False,
     max_active_runs=1,
     tags=["checkpoint-5", "transformation"],
 ) as dag:
