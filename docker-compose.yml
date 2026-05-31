@@ -18,11 +18,12 @@ x-airflow-common: &airflow-common
     WAREHOUSE_DB_NAME: warehouse
     WAREHOUSE_DB_USER: warehouse_user
     WAREHOUSE_DB_PASSWORD: warehouse_pass
-    _PIP_ADDITIONAL_REQUIREMENTS: "requests psycopg2-binary python-dotenv dlt[postgres]"
+    _PIP_ADDITIONAL_REQUIREMENTS: "requests psycopg2-binary python-dotenv dlt[postgres] dbt-core dbt-postgres"
   volumes:
     - ./extractor/dags:/opt/airflow/dags
     - ./extractor:/opt/airflow/extractor
     - ./dlt_pipeline:/opt/airflow/dlt_pipeline
+    - ./retailco_dbt:/opt/airflow/retailco_dbt
     - airflow_logs:/opt/airflow/logs
   depends_on:
     airflow_postgres:
