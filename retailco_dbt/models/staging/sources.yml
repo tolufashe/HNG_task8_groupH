@@ -14,3 +14,9 @@ sources:
       - name: employees
       - name: payment_methods
       - name: inventory_movements
+  - name: snapshots
+    database: warehouse
+    schema: snapshots
+    tables:
+      - name: snap_customer
+      - name: snap_product

@@ -1,9 +1,8 @@
 {{ config(materialized='table') }}
-
 select
     md5(cast(store_id as text)) as store_sk,
     store_id,
-    name,
+    store_name,
     city,
     state,
     address,

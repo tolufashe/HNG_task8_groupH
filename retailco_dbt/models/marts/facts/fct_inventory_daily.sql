@@ -28,6 +28,5 @@ left join {{ ref('dim_date') }}                 dd
     on dm.movement_date = dd.date_key
 left join {{ ref('dim_product') }}              dp
     on dm.product_id = dp.product_id
-    and dp.is_current = true
 left join {{ ref('dim_store') }}                ds
     on dm.store_id = ds.store_id

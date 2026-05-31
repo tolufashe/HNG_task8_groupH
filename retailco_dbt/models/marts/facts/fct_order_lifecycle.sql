@@ -21,7 +21,6 @@ select
 from {{ ref('stg_orders') }}                    o
 left join {{ ref('dim_customer') }}             dc
     on o.customer_id = dc.customer_id
-    and dc.is_current = true
 left join {{ ref('dim_store') }}                ds
     on o.store_id = ds.store_id
 left join {{ ref('dim_employee') }}             de

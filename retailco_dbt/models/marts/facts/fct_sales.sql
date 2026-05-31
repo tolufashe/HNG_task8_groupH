@@ -18,7 +18,6 @@ left join {{ ref('stg_orders') }}           o
     on oi.order_id = o.order_id
 left join {{ ref('dim_customer') }}         dc
     on o.customer_id = dc.customer_id
-    and dc.is_current = true
 left join {{ ref('dim_product') }}          dp
     on oi.product_id = dp.product_id
     and dp.is_current = true

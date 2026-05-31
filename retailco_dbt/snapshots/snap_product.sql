@@ -1,5 +1,4 @@
-{% snapshot dim_product %}
-
+{% snapshot snap_product %}
 {{
     config(
         target_schema='snapshots',
@@ -9,11 +8,10 @@
         invalidate_hard_deletes=False
     )
 }}
-
 select
     product_id,
     sku,
-    name,
+    product_name,
     category,
     sub_category,
     brand,
@@ -21,7 +19,7 @@ select
     cost_price,
     selling_price,
     effective_from,
-    is_deleted
+    is_deleted,
+    updated_at
 from {{ ref('stg_products') }}
-
 {% endsnapshot %}

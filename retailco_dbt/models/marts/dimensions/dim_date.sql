@@ -3,7 +3,7 @@
 with date_spine as (
     select generate_series(
         '2023-01-01'::date,
-        '2025-12-31'::date,
+        '2028-12-31'::date,
         '1 day'::interval
     )::date as date_day
 ),

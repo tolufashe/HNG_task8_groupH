@@ -1,22 +1,16 @@
 {{ config(materialized='view') }}
 
 select
-    id::uuid as payment_id,
-    "orderId"::uuid as order_id,
-    "customerId"::uuid as customer_id,
-    "paymentMethodId"::uuid as payment_method_id,
-    "amountPaid"::numeric as amount_paid,
-    currency::text as currency,
-    status::text as status,
-    "paymentType"::text as payment_type,
-    reference::text as reference,
-    "paidAt"::timestamp as paid_at,
-    "createdAt"::timestamp as created_at,
-    "updatedAt"::timestamp as updated_at,
-    case
-        when "amountPaid"::numeric = 0 then 'zero amount'
-        when "amountPaid"::numeric < 0
-         and "paymentType"::text != 'refund' then 'unexplained negative'
-        else null
-    end                                 as flag_reason
+    id::uuid                        as payment_id,
+    order_id::uuid                  as order_id,
+    customer_id::uuid               as customer_id,
+    payment_method_id::uuid         as payment_method_id,
+    amount_paid::numeric            as amount_paid,
+    currency::text                  as currency,
+    status::text                    as status,
+    payment_type::text              as payment_type,
+    reference::text                 as reference,
+    paid_at::timestamp              as paid_at,
+    created_at::timestamp           as created_at,
+    updated_at::timestamp           as updated_at
 from {{ source('raw', 'payments') }}

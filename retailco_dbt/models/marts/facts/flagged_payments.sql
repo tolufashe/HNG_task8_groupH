@@ -1,7 +1,6 @@
 {{ config(materialized='table') }}
-
 select
-    md5(cast(payment_id as text)) as flagged_payment_sk,
+    md5(cast(payment_id as text))   as flagged_payment_sk,
     payment_id,
     order_id,
     customer_id,
@@ -9,7 +8,12 @@ select
     currency,
     status,
     payment_type,
-    flag_reason,
+    case
+        when amount_paid = 0 then 'zero_amount'
+        when amount_paid < 0 and payment_type != 'refund' then 'unexplained_negative'
+        else 'other'
+    end                             as flag_reason,
     created_at
 from {{ ref('stg_payments') }}
-where flag_reason is not null
+where amount_paid = 0
+   or (amount_paid < 0 and payment_type != 'refund')

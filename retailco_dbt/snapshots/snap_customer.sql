@@ -1,5 +1,4 @@
-{% snapshot dim_customer %}
-
+{% snapshot snap_customer %}
 {{
     config(
         target_schema='snapshots',
@@ -9,7 +8,6 @@
         invalidate_hard_deletes=False
     )
 }}
-
 select
     customer_id,
     first_name,
@@ -23,7 +21,7 @@ select
     state,
     effective_from,
     registered_at,
-    is_deleted
+    is_deleted,
+    updated_at
 from {{ ref('stg_customers') }}
-
 {% endsnapshot %}
