@@ -1,0 +1,12 @@
+retailco:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('WAREHOUSE_DB_HOST', 'warehouse_postgres') }}"
+      port: "{{ env_var('WAREHOUSE_DB_PORT', '5432') | int }}"
+      dbname: "{{ env_var('WAREHOUSE_DB_NAME', 'warehouse') }}"
+      user: "{{ env_var('WAREHOUSE_DB_USER', 'warehouse_user') }}"
+      password: "{{ env_var('WAREHOUSE_DB_PASSWORD', 'warehouse_pass') }}"
+      schema: raw
+      threads: 4
