@@ -22,13 +22,14 @@ with DAG(
 
     # Wait for extraction DAG to finish first
     wait_for_extraction = ExternalTaskSensor(
-        task_id="wait_for_erp_extract",
-        external_dag_id="erp_extract",
-        allowed_states=["success"],
-        failed_states=["failed", "skipped"],
-        mode="poke",
-        poke_interval=60,
-        timeout=3600,
+    task_id="wait_for_erp_extract",
+    external_dag_id="erp_extract",
+    external_task_id="extract_payment_methods",
+    allowed_states=["success"],
+    failed_states=["failed", "skipped"],
+    mode="poke",
+    poke_interval=60,
+    timeout=3600,
     )
 
     # Run dlt Python script
