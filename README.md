@@ -40,10 +40,10 @@ The Kimball bus matrix, warehouse ERD, and architecture diagram are in the `/des
 
 | Fact table | Grain | dim_date | dim_customer | dim_product | dim_store | dim_employee | dim_payment_method |
 |---|---|---|---|---|---|---|---|
-| fct_sales | One row per order line | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| fct_payments | One row per payment | ✓ | ✓ | — | ✓ | — | ✓ |
-| fct_inventory_daily | One row per product × store × day | ✓ | — | ✓ | ✓ | — | — |
-| fct_order_lifecycle | One row per order | ✓ | ✓ | — | ✓ | ✓ | — |
+| fct_sales | One row per order line | ✓ | ✓ | ✓ | ✓ | ✓ | - |
+| fct_payments | One row per payment | ✓ | ✓ | - | ✓ | - | ✓ |
+| fct_inventory_daily | One row per product × store × day | ✓ | - | ✓ | ✓ | - | - |
+| fct_order_lifecycle | One row per order | ✓ | ✓ | - | ✓ | ✓ | - |
 
 `dim_customer` and `dim_product` use **SCD Type 2**, they track history with `valid_from`, `valid_to`, and `is_current` columns.
 
