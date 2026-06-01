@@ -318,7 +318,7 @@ ORDER BY fi.closing_balance DESC;
 
 **Load (warehouse):** dlt reads `updatedAt` from each lake table and only moves new or updated rows. `write_disposition="merge"` with `id` as the primary key prevents duplicates.
 
-**Transform (dbt):** dbt snapshots detect row-level changes using the `updated_at` column and insert new history records — never overwriting old ones. This preserves the full change history for customers and products.
+**Transform (dbt):** dbt snapshots detect row-level changes using the `updated_at` column and insert new history records, never overwriting old ones. This preserves the full change history for customers and products.
 
 ---
 
