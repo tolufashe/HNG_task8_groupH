@@ -1,276 +1,400 @@
 # RetailCo Data Pipeline
 
-This repository contains the full RetailCo data platform built with Apache Airflow, dlt, and dbt.
-The pipeline extracts data from the RetailCo ERP API, loads it into a data warehouse, and transforms
-it into analytics-ready dimensional models.
+A production-grade data pipeline for RetailCo, a Nigerian retail chain with stores in Lagos, Abuja, Port Harcourt, and Kano. The pipeline extracts data from a live ERP API, loads it into a data warehouse, and transforms it into analytics-ready Kimball dimensional models, orchestrated end to end by Apache Airflow.
 
 ---
 
-## What this does
+## Architecture
 
-The pipeline runs in four stages:
+```
+RetailCo ERP API (REST)
+     │  HTTPS + X-API-Key
+     ▼
+Python Extractor  ──►  Lake Postgres (port 5433)
+                              │  dlt incremental load
+                              ▼
+                       Warehouse Postgres (port 5435)
+                              │  dbt transforms
+                              ▼
+                    Dimensions + Fact Tables (raw_marts schema)
 
-1. **Extract** — pulls all 9 business entities from the ERP API into a raw lake PostgreSQL database
-2. **Load** — moves data from the lake into the warehouse using dlt, with type coercion and snake_case renaming
-3. **Transform** — dbt staging models clean the data; dbt mart models build Kimball-style dimensions and facts
-4. **Orchestrate** — Airflow runs the full pipeline daily with retries and failure handling
+Apache Airflow orchestrates all three stages daily.
+```
+
+**Tools:**
+- Orchestration: Apache Airflow 2.9
+- Extraction: Python 3.11
+- Lake storage: PostgreSQL 15
+- Loading: dlt (latest)
+- Warehouse storage: PostgreSQL 15
+- Transformation: dbt-core 1.7 + dbt-postgres
+- Containerisation: Docker + Docker Compose
+
+---
+
+## Design artifacts
+
+The Kimball bus matrix, warehouse ERD, and architecture diagram are in the `/design` folder of this repository.
+
+**Bus matrix summary:**
+
+| Fact table | Grain | dim_date | dim_customer | dim_product | dim_store | dim_employee | dim_payment_method |
+|---|---|---|---|---|---|---|---|
+| fct_sales | One row per order line | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| fct_payments | One row per payment | ✓ | ✓ | — | ✓ | — | ✓ |
+| fct_inventory_daily | One row per product × store × day | ✓ | — | ✓ | ✓ | — | — |
+| fct_order_lifecycle | One row per order | ✓ | ✓ | — | ✓ | ✓ | — |
+
+`dim_customer` and `dim_product` use **SCD Type 2**, they track history with `valid_from`, `valid_to`, and `is_current` columns.
 
 ---
 
 ## Prerequisites
 
-Before running anything, make sure you have the following installed:
+- [Docker Desktop](https://www.docker.com/products/docker-desktop)
+- [VS Code](https://code.visualstudio.com)
+- [Python 3.11+](https://www.python.org/downloads)
 
-- **Docker Desktop**: https://www.docker.com/products/docker-desktop
-- **VS Code**: https://code.visualstudio.com
-- **Python 3.11+**: https://www.python.org/downloads
-
-Verify Docker is running by opening Docker Desktop and confirming the whale icon appears
-in your taskbar with the status "Engine running".
+Confirm Docker is running, the whale icon should appear in your taskbar with status "Engine running".
 
 ---
 
-## Step 1: Clone the repository
+## Setup
+
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/tolufashe/HNG_task8_groupH.git
-cd retailco-pipeline
+cd HNG_task8_groupH
 ```
 
----
+### 2. Create the `.env` file
 
-## Step 2: Configure the `.env` file
-
-Create a file called `.env` in the root `retailco-pipeline` folder.
-This file holds all secrets and connection details. **Never commit this file to Git.**
+Create `.env` in the root folder. This file holds secrets, **never commit it to Git**.
 
 ```
-# ERP API credentials
 ERP_API_KEY=your_api_key_here
-ERP_API_BASE_URL=https://hngstage8da-55c7f5f769c8.herokuapp.com
+ERP_API_BASE_URL=your_api_url_here
 
-# Lake database (raw data storage)
-LAKE_DB_HOST=lake_postgres
-LAKE_DB_PORT=5432
+LAKE_DB_HOST=localhost
+LAKE_DB_PORT=5433
 LAKE_DB_NAME=lake
 LAKE_DB_USER=lake_user
 LAKE_DB_PASSWORD=lake_pass
 
-# Warehouse database (clean data storage)
-WAREHOUSE_DB_HOST=warehouse_postgres
-WAREHOUSE_DB_PORT=5432
+WAREHOUSE_DB_HOST=localhost
+WAREHOUSE_DB_PORT=5435
 WAREHOUSE_DB_NAME=warehouse
 WAREHOUSE_DB_USER=warehouse_user
 WAREHOUSE_DB_PASSWORD=warehouse_pass
 ```
 
-Replace `your_api_key_here` with your actual API key.
-
-The `.gitignore` file already excludes `.env` from Git. Never paste your API key
-anywhere that gets committed to the repository.
-
----
-
-## Step 3: Start Docker
-
-Open a terminal in the `retailco-pipeline` folder and run:
+### 3. Start Docker
 
 ```bash
 docker compose up -d
 ```
 
-This starts the full infrastructure:
+This starts all containers:
 
-| Container | Purpose |
-|---|---|
-| `lake_postgres` | Raw lake database where API data is initially stored (port 5433) |
-| `warehouse_postgres` | Clean warehouse where dlt loads normalized data (port 5435) |
-| `airflow_postgres` | Airflow internal database — not your data (port 5434) |
-| `airflow_init` | One-time setup container, runs once then exits |
-| `airflow_createuser` | Creates the Airflow admin user, runs once then exits |
-| `airflow_scheduler` | Runs DAGs on schedule |
-| `airflow_webserver` | Airflow UI at http://localhost:8080 |
+| Container | Purpose | Port |
+|---|---|---|
+| `lake_postgres` | Raw lake database | 5433 |
+| `warehouse_postgres` | Clean warehouse | 5435 |
+| `airflow_postgres` | Airflow internal database | - |
+| `airflow_scheduler` | Runs DAGs on schedule | - |
+| `airflow_webserver` | Airflow UI | 8080 |
 
-The first time you run this it will download Docker images which takes 3 to 5 minutes.
-Subsequent starts are much faster.
+The first run downloads Docker images and installs dbt/dlt inside the Airflow container, allow 10 to 15 minutes.
 
-Confirm everything started:
+Confirm everything is running:
 
 ```bash
 docker compose ps
 ```
 
-You should see `lake_postgres`, `warehouse_postgres`, and both Airflow containers
-showing as **healthy** or **running**.
+All containers should show as **healthy** or **running**.
 
 ---
 
-## Step 4: Open Airflow
+## Running the pipeline
 
-Go to `http://localhost:8080` and log in with:
+### Open Airflow
 
-- **Username:** `admin`
-- **Password:** `admin`
+Go to `http://localhost:8080` and log in:
+- Username: `admin`
+- Password: `admin`
 
----
+You will see three DAGs:
 
-## Step 5: Run the extract DAG
+| DAG | Owner | What it does |
+|---|---|---|
+| `erp_extract` | person_b | Extracts all 9 entities from the ERP API into the lake |
+| `dlt_load_warehouse` | person_c | Loads lake data into the warehouse via dlt |
+| `dbt_transform` | person_d | Runs snapshots, staging, marts, and tests |
 
-1. Find the DAG called **`erp_extract`** in the list
-2. Click the toggle to enable it (turns blue)
-3. Click the play button to trigger a manual run
-4. Click the DAG name and select the **Graph** tab to watch tasks run in real time
+### Running order
 
-The DAG has 9 tasks, one per entity. `order_items` and `inventory_movements` are large
-and take longer on the first run (up to 2 hours each).
+The DAGs are chained, each waits for the previous to succeed before starting:
 
----
-
-## Step 6: Run the dlt load pipeline
-
-Once extraction is complete:
-
-1. Find the DAG called **`load_warehouse`** in the Airflow list
-2. Enable and trigger it
-3. This runs the dlt pipeline which moves data from the lake to the warehouse,
-   converts camelCase column names to snake_case, and applies correct data types
-
-To run the dlt pipeline manually outside Airflow:
-
-```bash
-cd retailco-pipeline
-python dlt_pipeline/load_warehouse.py
+```
+erp_extract  →  dlt_load_warehouse  →  dbt_transform
 ```
 
-The pipeline uses incremental loading — on the first run it moves all rows,
-on subsequent runs it only moves rows with a newer `updatedAt` timestamp.
+To trigger the full pipeline manually:
 
----
+1. Enable and trigger `erp_extract`
+2. Once it completes, enable and trigger `dlt_load_warehouse`
+3. Once it completes, `dbt_transform` will run automatically
 
-## Step 7: Run dbt transformations
+On subsequent days the entire chain runs automatically at midnight UTC.
+
+### Running dbt manually
 
 ```bash
 cd retailco_dbt
-dbt debug                        # test connection
-dbt snapshot                     # run SCD2 snapshots for dim_customer and dim_product
-dbt run --select staging         # build all 9 staging models + flagged_payments
-dbt run --select marts           # build dimensions and fact tables
-dbt test                         # run all tests
-dbt docs generate                # generate documentation site
-dbt docs serve                   # open docs in browser
+dbt debug # test connection
+dbt snapshot # SCD2 history for customers and products
+dbt run --select staging # clean and type-cast raw columns
+dbt run --select marts # build dimensions and facts
+dbt test # run all 58 data quality tests
+dbt docs generate && dbt docs serve # browse documentation
 ```
 
 ---
 
-## Connecting to the databases directly
+## Querying the warehouse
 
-You can connect from any SQL client using these credentials:
+Connect with any SQL client using:
 
-### Lake database (raw data)
+| Setting | Lake | Warehouse |
+|---|---|---|
+| Host | localhost | localhost |
+| Port | 5433 | 5435 |
+| Database | lake | warehouse |
+| User | lake_user | warehouse_user |
+| Password | lake_pass | warehouse_pass |
 
-| Setting | Value |
-|---|---|
-| Host | localhost |
-| Port | 5433 |
-| Database | lake |
-| Username | lake_user |
-| Password | lake_pass |
-| Schema | raw |
+### Useful queries
 
-### Warehouse database (clean data)
+**Revenue by store:**
+```sql
+SELECT
+    ds.store_name,
+    ds.city,
+    SUM(fs.line_total)      AS total_revenue,
+    COUNT(DISTINCT fs.order_id) AS total_orders
+FROM raw_marts.fct_sales fs
+JOIN raw_marts.dim_store ds ON fs.store_sk = ds.store_sk
+JOIN raw_marts.dim_date  dd ON fs.date_key  = dd.date_key
+GROUP BY ds.store_name, ds.city
+ORDER BY total_revenue DESC;
+```
 
-| Setting | Value |
-|---|---|
-| Host | localhost |
-| Port | 5435 |
-| Database | warehouse |
-| Username | warehouse_user |
-| Password | warehouse_pass |
-| Schema | raw (after dlt load), then marts (after dbt run) |
+**Monthly revenue trend:**
+```sql
+SELECT
+    dd.year,
+    dd.month,
+    SUM(fs.line_total) AS revenue
+FROM raw_marts.fct_sales fs
+JOIN raw_marts.dim_date dd ON fs.date_key = dd.date_key
+GROUP BY dd.year, dd.month
+ORDER BY dd.year, dd.month;
+```
+
+**Top 10 products by revenue:**
+```sql
+SELECT
+    dp.product_name,
+    dp.category,
+    SUM(fs.line_total)  AS revenue,
+    SUM(fs.quantity)    AS units_sold
+FROM raw_marts.fct_sales fs
+JOIN raw_marts.dim_product dp ON fs.product_sk = dp.product_sk
+WHERE dp.is_current = true
+GROUP BY dp.product_name, dp.category
+ORDER BY revenue DESC
+LIMIT 10;
+```
+
+**Customer segments by order value:**
+```sql
+SELECT
+    dc.segment,
+    dc.tier,
+    COUNT(DISTINCT fo.order_id)  AS order_count,
+    AVG(fo.total_amount)         AS avg_order_value
+FROM raw_marts.fct_order_lifecycle fo
+JOIN raw_marts.dim_customer dc ON fo.customer_sk = dc.customer_sk
+WHERE dc.is_current = true
+GROUP BY dc.segment, dc.tier
+ORDER BY avg_order_value DESC;
+```
+
+**Payment method breakdown:**
+```sql
+SELECT
+    dpm.payment_method_name,
+    COUNT(*)               AS payment_count,
+    SUM(fp.amount_paid)    AS total_amount
+FROM raw_marts.fct_payments fp
+JOIN raw_marts.dim_payment_method dpm
+    ON fp.payment_method_sk = dpm.payment_method_sk
+GROUP BY dpm.payment_method_name
+ORDER BY payment_count DESC;
+```
+
+**Flagged anomalous payments:**
+```sql
+SELECT
+    flag_reason,
+    COUNT(*)            AS count,
+    SUM(amount_paid)    AS total_amount
+FROM raw_marts.flagged_payments
+GROUP BY flag_reason
+ORDER BY count DESC;
+```
+
+**Current inventory by store and product:**
+```sql
+SELECT
+    ds.store_name,
+    dp.product_name,
+    dp.category,
+    fi.closing_balance
+FROM raw_marts.fct_inventory_daily fi
+JOIN raw_marts.dim_store   ds ON fi.store_sk   = ds.store_sk
+JOIN raw_marts.dim_product dp ON fi.product_sk = dp.product_sk
+WHERE fi.date_key = (SELECT MAX(date_key) FROM raw_marts.fct_inventory_daily)
+ORDER BY fi.closing_balance DESC;
+```
 
 ---
 
 ## Table reference
 
-### Lake tables (`raw` schema, camelCase columns)
+### Lake (`raw` schema, camelCase columns, all TEXT)
 
-| Table | Description | Approx rows |
+| Table | Rows | Description |
 |---|---|---|
-| `raw.customers` | One row per customer | ~5,000 |
-| `raw.products` | One row per product | ~2,000 |
-| `raw.stores` | Lagos, Abuja, Port Harcourt, Kano | ~4 |
-| `raw.employees` | One row per employee | ~50 |
-| `raw.orders` | One row per order | ~80,000 |
-| `raw.order_items` | One row per order line item | ~360,000 |
-| `raw.payments` | One row per payment event | ~72,000 |
-| `raw.inventory_movements` | One row per stock movement | ~355,000 |
-| `raw.payment_methods` | Cash, Card, Bank Transfer etc. | ~5 |
-| `raw._watermarks` | Internal incremental tracking, 1 row per entity | 9 |
+| `raw.customers` | 5,000 | Customer records |
+| `raw.products` | 2,000 | Product catalogue |
+| `raw.stores` | 4 | Lagos, Abuja, Port Harcourt, Kano |
+| `raw.employees` | 50 | Staff records |
+| `raw.orders` | 80,000 | Order headers |
+| `raw.order_items` | 360,783 | Order line items |
+| `raw.payments` | 72,076 | Payment events (includes refunds) |
+| `raw.inventory_movements` | 355,726 | Stock in/out events |
+| `raw.payment_methods` | 5 | Cash, Card, Transfer, etc. |
+| `raw._watermarks` | 9 | Incremental load tracking |
 
-All lake columns are stored as `TEXT` or `JSONB` in camelCase as returned by the API
-(e.g. `updatedAt`, `isDeleted`, `firstName`).
+### Warehouse dimensions (`raw_marts` schema)
 
-### Warehouse tables (after dlt load, snake_case columns)
+| Table | Rows | Notes |
+|---|---|---|
+| `dim_customer` | 5,000 | SCD2,  history tracked via valid_from/valid_to |
+| `dim_product` | 2,000 | SCD2, history tracked via valid_from/valid_to |
+| `dim_store` | 4 | Static |
+| `dim_employee` | 50 | Static |
+| `dim_date` | 2,192 | includes Nigerian public holidays |
+| `dim_payment_method` | 5 | Static |
 
-The dlt pipeline converts all camelCase column names to snake_case and applies correct
-data types automatically. For example `updatedAt TEXT` becomes `updated_at TIMESTAMPTZ`.
+### Warehouse facts (`raw_marts` schema)
+
+| Table | Rows | Grain |
+|---|---|---|
+| `fct_sales` | 342,926 | One row per order line item |
+| `fct_payments` | 70,641 | One row per payment event |
+| `fct_inventory_daily` | 344,905 | One row per product × store × day |
+| `fct_order_lifecycle` | 80,000 | One row per order |
+| `flagged_payments` | 1,435 | Anomalous payments excluded from fct_payments |
 
 ---
 
 ## How incremental loading works
 
-### Extract layer (lake)
+**Extract (lake):** After the first full extract, daily runs only download records updated since the last run. The `raw._watermarks` table stores the last `updatedAt` timestamp per entity. The extractor passes `?updated_after=<timestamp>` to the API.
 
-After the first full extract, every subsequent daily run only downloads records that changed
-since the last run. This is tracked using `raw._watermarks` which stores the last
-`updated_at` timestamp per entity. The extractor passes this as `?updated_after=<timestamp>`
-to the API.
+**Load (warehouse):** dlt reads `updatedAt` from each lake table and only moves new or updated rows. `write_disposition="merge"` with `id` as the primary key prevents duplicates.
 
-### Load layer (warehouse)
-
-The dlt pipeline reads the `updatedAt` column from each lake table and only moves rows
-with a newer timestamp than the last run. It uses `write_disposition="merge"` with `id`
-as the primary key, so running the pipeline twice never creates duplicate rows.
+**Transform (dbt):** dbt snapshots detect row-level changes using the `updated_at` column and insert new history records — never overwriting old ones. This preserves the full change history for customers and products.
 
 ---
 
-## Flagged payments
+## Data quality
 
-Some payment rows are anomalous and excluded from revenue analysis:
+58 automated dbt tests run after every pipeline execution:
 
-- `amount_paid = 0` — always flagged as `zero_amount`
-- `amount_paid < 0` and `payment_type != 'refund'` — flagged as `unexplained_negative`
-
-Legitimate refunds (`amount_paid < 0` and `payment_type = 'refund'`) are valid records
-and remain in the main payments flow.
-
-Flagged rows are isolated into the `flagged_payments` table built by dbt. Run
-`dbt run --select flagged_payments` to build it, then query it directly to see
-what was isolated and why.
+- `not_null`: all primary and foreign keys
+- `unique`: all surrogate keys
+- `relationships`: all foreign key references to dimension tables
+- Custom business logic:
+  - No negative quantities in `fct_inventory_daily`
+  - Orders delivered after they were placed in `fct_order_lifecycle`
+  - No flagged payments leaking into `fct_payments`
+  - No negative line totals in `fct_sales`
 
 ---
 
 ## Troubleshooting
 
-**http://localhost:8080 will not open**
-Airflow is still starting. Wait 2 to 3 minutes after `docker compose up -d` and try again.
+**`http://localhost:8080` will not open**
+Airflow is still installing packages. Wait 10–15 minutes after `docker compose up -d` then try again.
 
 **A task is red in Airflow**
-Click the red task, click Logs, read the error. Common causes are API timeouts or rate
-limiting — the extractor handles these with automatic retries. Click "Clear task" to retry.
+Click the task → Logs → read the error. API timeouts are handled automatically with retries. Click "Clear task" to retry a failed task.
 
 **Tables are missing after a green run**
-The entity returned zero rows — normal for incremental runs when nothing changed.
-To force a full re-extract, delete the relevant row from `raw._watermarks` and re-run.
+The entity returned zero rows, normal for incremental runs when nothing changed. To force a full re-extract, delete the relevant row from `raw._watermarks` and re-run.
 
-**Docker containers will not start**
-Make sure Docker Desktop is open and the engine is running. Then run:
+**dbt cannot connect**
+Run `dbt debug` inside `retailco_dbt/`. Confirm `warehouse_postgres` is running with `docker compose ps` and verify `retailco_dbt/profiles.yml` matches warehouse credentials.
 
+**Containers will not start**
 ```bash
 docker compose down -v
 docker compose up -d
 ```
 
-**dbt cannot connect to the warehouse**
-Run `dbt debug` and check the error. Confirm `warehouse_postgres` is running with
-`docker compose ps` and verify your `profiles.yml` matches the warehouse credentials.
+---
+
+## Repository structure
+
+```
+HNG_task8_groupH/
+├── design/                        # CP1: bus matrix, ERD, architecture diagram
+├── extractor/                     # CP2: Python ERP extractor
+│   ├── erp_extractor.py
+│   └── dags/
+│       ├── extract_dag.py         # erp_extract DAG
+│       ├── load_dag.py            # dlt_load_warehouse DAG
+│       └── dbt_dag.py             # dbt_transform DAG
+├── dlt_pipeline/                  # CP3: dlt lake-to-warehouse loader
+│   └── dlt_pipeline.py
+├── retailco_dbt/                  # CP4: dbt project
+│   ├── models/
+│   │   ├── staging/               # 9 staging views
+│   │   └── marts/
+│   │       ├── dimensions/        # 6 dimension tables
+│   │       └── facts/             # 4 fact tables + flagged_payments
+│   ├── snapshots/                 # SCD2 snapshots
+│   ├── tests/                     # Custom data tests
+│   ├── profiles.yml
+│   └── dbt_project.yml
+├── docker-compose.yml             # CP5: full infrastructure
+├── .env.example                   # Template: copy to .env and fill in secrets
+├── .gitignore
+└── README.md
+```
+
+---
+
+## Team
+
+| Person | Role | Checkpoints |
+|---|---|---|
+| Person A (Miss Cryptic) | Design + Orchestration | CP1, CP5 |
+| Person B (KB) [TL]| Extraction | CP2 |
+| Person C (Tolufashe)| Loading | CP3 |
+| Person D (AnalystMund)| Modelling | CP4 |
