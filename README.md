@@ -175,7 +175,7 @@ Connect with any SQL client using:
 | User | lake_user | warehouse_user |
 | Password | lake_pass | warehouse_pass |
 
-### Business Questions Queries
+## Business Questions Queries
 
 **Revenue By Store:**
 ```sql
