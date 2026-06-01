@@ -177,97 +177,124 @@ Connect with any SQL client using:
 
 ### Useful queries
 
-**Revenue by store:**
+**Revenue By Store:**
 ```sql
-SELECT
+SELECT 
     ds.store_name,
     ds.city,
-    SUM(fs.line_total)      AS total_revenue,
-    COUNT(DISTINCT fs.order_id) AS total_orders
+    ROUND(SUM(fs.line_total)::numeric, 2) as total_revenue,
+    COUNT(DISTINCT fs.order_id) as total_orders
 FROM raw_marts.fct_sales fs
 JOIN raw_marts.dim_store ds ON fs.store_sk = ds.store_sk
-JOIN raw_marts.dim_date  dd ON fs.date_key  = dd.date_key
 GROUP BY ds.store_name, ds.city
 ORDER BY total_revenue DESC;
 ```
 
-**Monthly revenue trend:**
+**Revenue By Category:**
+```sql
+SELECT
+    dp.category,
+    ROUND(SUM(fs.line_total)::numeric, 2) as total_revenue,
+    SUM(fs.quantity) as units_sold
+FROM raw_marts.fct_sales fs
+JOIN raw_marts.dim_product dp ON fs.product_sk = dp.product_sk
+GROUP BY dp.category
+ORDER BY total_revenue DESC;
+```
+
+**Monthly Revenue Trend:**
 ```sql
 SELECT
     dd.year,
     dd.month,
-    SUM(fs.line_total) AS revenue
+    ROUND(SUM(fs.line_total)::numeric, 2) as monthly_revenue,
+    COUNT(DISTINCT fs.order_id) as orders
 FROM raw_marts.fct_sales fs
 JOIN raw_marts.dim_date dd ON fs.date_key = dd.date_key
 GROUP BY dd.year, dd.month
-ORDER BY dd.year, dd.month;
+ORDER BY dd.year, dd.month
+LIMIT 24;
 ```
 
-**Top 10 products by revenue:**
+**Customer Behavior By Segment:**
+```sql
+SELECT
+    dc.segment,
+    COUNT(DISTINCT fo.order_id) as total_orders,
+    COUNT(DISTINCT dc.customer_id) as total_customers,
+    ROUND(AVG(fo.total_amount)::numeric, 2) as avg_order_value,
+    ROUND((COUNT(DISTINCT fo.order_id)::numeric / COUNT(DISTINCT dc.customer_id)), 1) as orders_per_customer
+FROM raw_marts.fct_order_lifecycle fo
+JOIN raw_marts.dim_customer dc ON fo.customer_sk = dc.customer_sk
+GROUP BY dc.segment
+ORDER BY total_orders DESC;
+```
+
+**Top 10 Products By Revenue:**
 ```sql
 SELECT
     dp.product_name,
     dp.category,
-    SUM(fs.line_total)  AS revenue,
-    SUM(fs.quantity)    AS units_sold
+    ROUND(SUM(fs.line_total)::numeric, 2) as revenue,
+    SUM(fs.quantity) as units_sold,
+    ROUND(AVG(fs.discount_pct)::numeric, 2) as avg_discount_pct
 FROM raw_marts.fct_sales fs
 JOIN raw_marts.dim_product dp ON fs.product_sk = dp.product_sk
-WHERE dp.is_current = true
 GROUP BY dp.product_name, dp.category
 ORDER BY revenue DESC
 LIMIT 10;
 ```
 
-**Customer segments by order value:**
+**Discount Impact:**
 ```sql
 SELECT
-    dc.segment,
-    dc.tier,
-    COUNT(DISTINCT fo.order_id)  AS order_count,
-    AVG(fo.total_amount)         AS avg_order_value
-FROM raw_marts.fct_order_lifecycle fo
-JOIN raw_marts.dim_customer dc ON fo.customer_sk = dc.customer_sk
-WHERE dc.is_current = true
-GROUP BY dc.segment, dc.tier
-ORDER BY avg_order_value DESC;
+    CASE
+        WHEN discount_pct = 0 THEN 'No Discount'
+        WHEN discount_pct <= 10 THEN '1-10%'
+        WHEN discount_pct <= 20 THEN '11-20%'
+        ELSE 'Above 20%'
+    END AS discount_band,
+    COUNT(*) as order_lines,
+    ROUND(SUM(line_total)::numeric, 2) as revenue,
+    ROUND(AVG(line_total)::numeric, 2) as avg_line_value
+FROM raw_marts.fct_sales
+GROUP BY discount_band
+ORDER BY revenue DESC;
 ```
 
-**Payment method breakdown:**
+**Payment Methods:**
 ```sql
 SELECT
     dpm.payment_method_name,
-    COUNT(*)               AS payment_count,
-    SUM(fp.amount_paid)    AS total_amount
+    COUNT(*) as transaction_count,
+    ROUND(SUM(fp.amount_paid)::numeric, 2) as total_amount,
+    ROUND(AVG(fp.amount_paid)::numeric, 2) as avg_transaction
 FROM raw_marts.fct_payments fp
-JOIN raw_marts.dim_payment_method dpm
-    ON fp.payment_method_sk = dpm.payment_method_sk
+JOIN raw_marts.dim_payment_method dpm ON fp.payment_method_sk = dpm.payment_method_sk
 GROUP BY dpm.payment_method_name
-ORDER BY payment_count DESC;
+ORDER BY total_amount DESC;
 ```
 
-**Flagged anomalous payments:**
+**Flagged Payments Breakdown:**
 ```sql
 SELECT
     flag_reason,
-    COUNT(*)            AS count,
-    SUM(amount_paid)    AS total_amount
+    COUNT(*) as count,
+    ROUND(SUM(amount_paid)::numeric, 2) as total_amount
 FROM raw_marts.flagged_payments
 GROUP BY flag_reason
 ORDER BY count DESC;
 ```
 
-**Current inventory by store and product:**
+**Refunds In Payments:**
 ```sql
 SELECT
-    ds.store_name,
-    dp.product_name,
-    dp.category,
-    fi.closing_balance
-FROM raw_marts.fct_inventory_daily fi
-JOIN raw_marts.dim_store   ds ON fi.store_sk   = ds.store_sk
-JOIN raw_marts.dim_product dp ON fi.product_sk = dp.product_sk
-WHERE fi.date_key = (SELECT MAX(date_key) FROM raw_marts.fct_inventory_daily)
-ORDER BY fi.closing_balance DESC;
+    payment_type,
+    COUNT(*) as count,
+    ROUND(SUM(amount_paid)::numeric, 2) as total_amount
+FROM raw_marts.fct_payments
+WHERE amount_paid < 0
+GROUP BY payment_type;
 ```
 
 ---
