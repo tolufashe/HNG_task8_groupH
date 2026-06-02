@@ -1,5 +1,4 @@
 {{ config(materialized='table') }}
-
 with daily_movements as (
     select
         moved_at::date as movement_date,
@@ -12,7 +11,6 @@ with daily_movements as (
     from {{ ref('stg_inventory_movements') }}
     group by 1, 2, 3
 )
-
 select
     md5(cast(dm.movement_date as text)
         || cast(dm.product_id as text)
@@ -23,10 +21,11 @@ select
     dm.quantity_in,
     dm.quantity_out,
     dm.quantity_in - dm.quantity_out as net_movement
-from daily_movements                            dm
-left join {{ ref('dim_date') }}                 dd
+from daily_movements dm
+left join {{ ref('dim_date') }} dd
     on dm.movement_date = dd.date_key
-left join {{ ref('dim_product') }}              dp
+left join {{ ref('dim_product') }} dp
     on dm.product_id = dp.product_id
-left join {{ ref('dim_store') }}                ds
+    and dp.is_current = true
+left join {{ ref('dim_store') }} ds
     on dm.store_id = ds.store_id
