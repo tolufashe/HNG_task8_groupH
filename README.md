@@ -432,7 +432,6 @@ HNG_task8_groupH/
 │   ├── profiles.yml
 │   └── dbt_project.yml
 ├── .env.example                   # Template: copy to .env and fill in secrets
-├── demo video.mp4
 ├── .gitignore
 ├── README.md
 ├── RetailCo Data Business Insights.docx
