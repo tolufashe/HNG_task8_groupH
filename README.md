@@ -386,6 +386,12 @@ docker compose up -d
 
 ---
 
+## Known Issues
+
+**- dbt deprecation warning:** snapshots were renamed from dim_customer/dim_product to snap_customer/snap_product. Old tables in the snapshots schema carry the original names but are no longer actively used.
+
+---
+
 ## Repository structure
 
 ```
