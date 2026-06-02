@@ -429,10 +429,12 @@ HNG_task8_groupH/
 │   ├── tests/                     # Custom data tests
 │   ├── profiles.yml
 │   └── dbt_project.yml
-├── docker-compose.yml             # CP5: full infrastructure
 ├── .env.example                   # Template: copy to .env and fill in secrets
+├── demo video
 ├── .gitignore
-└── README.md
+├── README.md
+├── RetailCo Data Business Insights.docx
+└── docker-compose.yml             # CP5: full infrastructure
 ```
 
 ---
