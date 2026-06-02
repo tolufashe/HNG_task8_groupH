@@ -18,7 +18,9 @@ with DAG(
     default_args=default_args,
     start_date=datetime(2024, 1, 1),
     schedule_interval="@daily",
-    catchup=False,
+    catchup=False, # Sensor date-alignment: dbt_transform runs daily alongside dlt_load_warehouse.
+                   # To backfill, trigger erp_extract, dlt_load_warehouse, and dbt_transform
+                   # together for the same date range using: airflow dags trigger --exec-date <date>
     max_active_runs=1,
     tags=["checkpoint-5", "transformation"],
 ) as dag:
