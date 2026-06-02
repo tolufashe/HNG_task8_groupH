@@ -1,5 +1,6 @@
 {{ config(materialized='table') }}
 
+{{ config(materialized='table') }}
 select
     md5(cast(o.order_id as text)) as lifecycle_sk,
     o.order_id,
@@ -18,18 +19,19 @@ select
     o.shipped_at,
     o.delivered_at,
     o.cancelled_at
-from {{ ref('stg_orders') }}                    o
-left join {{ ref('dim_customer') }}             dc
+from {{ ref('stg_orders') }} o
+left join {{ ref('dim_customer') }} dc
     on o.customer_id = dc.customer_id
-left join {{ ref('dim_store') }}                ds
+    and dc.is_current = true
+left join {{ ref('dim_store') }} ds
     on o.store_id = ds.store_id
-left join {{ ref('dim_employee') }}             de
+left join {{ ref('dim_employee') }} de
     on o.employee_id = de.employee_id
-left join {{ ref('dim_date') }}                 d_ordered
+left join {{ ref('dim_date') }} d_ordered
     on o.ordered_at::date = d_ordered.date_key
-left join {{ ref('dim_date') }}                 d_paid
+left join {{ ref('dim_date') }} d_paid
     on o.paid_at::date = d_paid.date_key
-left join {{ ref('dim_date') }}                 d_shipped
+left join {{ ref('dim_date') }} d_shipped
     on o.shipped_at::date = d_shipped.date_key
-left join {{ ref('dim_date') }}                 d_delivered
+left join {{ ref('dim_date') }} d_delivered
     on o.delivered_at::date = d_delivered.date_key

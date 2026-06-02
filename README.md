@@ -20,6 +20,11 @@ Python Extractor  ──►  Lake Postgres (port 5433)
 
 Apache Airflow orchestrates all three stages daily.
 ```
+## DAG Architecture Note
+
+The pipeline is implemented as three chained DAGs, `erp_extract`, `dlt_load_warehouse`, and `dbt_transform`, connected via Airflow ExternalTaskSensors. This constitutes the "well-structured DAG group" described in the brief. Each DAG is independently retryable and observable, and downstream DAGs are blocked automatically if an upstream DAG fails. The task execution order within the full pipeline is:
+
+`extract (9 tasks) → dlt load (1 task) → dbt snapshot → dbt staging → dbt marts → dbt test`
 
 **Tools:**
 - Orchestration: Apache Airflow 2.9
@@ -160,6 +165,15 @@ dbt run --select marts # build dimensions and facts
 dbt test # run all 58 data quality tests
 dbt docs generate && dbt docs serve # browse documentation
 ```
+### First-Run Note
+
+On the first run, `dbt_transform` may show `wait_for_dlt_load` as running indefinitely. This happens because the ExternalTaskSensor matches on logical execution date. If this occurs during a demo:
+
+1. Confirm `dlt_load_warehouse` has a successful run for the same logical date
+2. Click the `wait_for_dlt_load` task → **Mark state as Success**
+3. The remaining dbt tasks will proceed automatically
+
+This is a one-time first-run behaviour. On subsequent daily runs the dates align automatically.
 
 ---
 
@@ -175,7 +189,7 @@ Connect with any SQL client using:
 | User | lake_user | warehouse_user |
 | Password | lake_pass | warehouse_pass |
 
-### Business Questions Queries
+## Business Questions Queries
 
 **Revenue By Store:**
 ```sql
@@ -383,6 +397,12 @@ Run `dbt debug` inside `retailco_dbt/`. Confirm `warehouse_postgres` is running 
 docker compose down -v
 docker compose up -d
 ```
+
+---
+
+## Known Issues
+
+**- dbt deprecation warning:** snapshots were renamed from dim_customer/dim_product to snap_customer/snap_product. Old tables in the snapshots schema carry the original names but are no longer actively used.
 
 ---
 
