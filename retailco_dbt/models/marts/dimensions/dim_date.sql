@@ -1,11 +1,19 @@
 {{ config(materialized='table') }}
 
 with date_spine as (
+    {% if target.type == 'duckdb' -%}
+    select unnest(generate_series(
+        '2023-01-01'::date,
+        '2028-12-31'::date,
+        '1 day'::interval
+    ))::date as date_day
+    {%- else -%}
     select generate_series(
         '2023-01-01'::date,
         '2028-12-31'::date,
         '1 day'::interval
     )::date as date_day
+    {%- endif %}
 ),
 
 nigerian_holidays as (
@@ -27,10 +35,18 @@ select
     extract(year from d.date_day)::int as year,
     extract(quarter from d.date_day)::int as quarter,
     extract(month from d.date_day)::int as month,
-    to_char(d.date_day, 'Month') as month_name,
+    {% if target.type == 'duckdb' -%}
+    trim(strftime(d.date_day, '%B'))
+    {%- else -%}
+    to_char(d.date_day, 'Month')
+    {%- endif %} as month_name,
     extract(week from d.date_day)::int as week,
     extract(dow from d.date_day)::int as day_of_week,
-    to_char(d.date_day, 'Day') as day_name,
+    {% if target.type == 'duckdb' -%}
+    trim(strftime(d.date_day, '%A'))
+    {%- else -%}
+    to_char(d.date_day, 'Day')
+    {%- endif %} as day_name,
     case when extract(dow from d.date_day) in (0,6)
          then true else false end as is_weekend,
     case when h.holiday_date is not null

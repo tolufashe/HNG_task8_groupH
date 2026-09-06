@@ -1,0 +1,8 @@
+retailco:
+  target: duckdb_local
+  outputs:
+    duckdb_local:
+      type: duckdb
+      path: "warehouse.duckdb"
+      schema: raw
+      threads: 4
